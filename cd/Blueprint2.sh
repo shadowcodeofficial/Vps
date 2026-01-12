@@ -108,7 +108,7 @@ install_mahim() {
     # --- Step 3: Download Release ---
     print_header "DOWNLOADING BLUEPRINT"
     print_status "Fetching beta-2025-11"
-    wget -q --show-progress https://github.com/BlueprintFramework/framework/releases/download/beta-2025-11/beta-2025-11.zip -O release.zip
+    wget -q --show-progress https://github.com/BlueprintFramework/framework/releases/download/beta-2025-12/release.zip -O release.zip
     
     print_status "Extracting files"
     unzip -o release.zip > /dev/null 2>&1
