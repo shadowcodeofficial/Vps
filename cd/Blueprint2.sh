@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Colors for output
@@ -29,10 +28,6 @@ print_success() {
 
 print_error() {
     echo -e "${RED}❌ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${MAGENTA}⚠️  $1${NC}"
 }
 
 # Function to check if command succeeded
@@ -67,11 +62,9 @@ animate_progress() {
 welcome_animation() {
     clear
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}"
-    echo -e "${NC}"
-    echo -e "${CYAN}              Blueprint Installer${NC}"
+    echo -e "${CYAN}           Blueprint Installer Fixed             ${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    sleep 2
+    sleep 1
 }
 
 # Function: Install (Fresh Setup)
@@ -83,142 +76,88 @@ install_mahim() {
         return 1
     fi
 
-    print_status "Starting Fresh Install for "
-
     # --- Step 1: Install Node.js 20.x ---
-    print_header "INSTALLING NODE.JS 20.x"
-    print_status "Installing required packages"
-    sudo apt-get install -y ca-certificates curl gnupg > /dev/null 2>&1 &
-    animate_progress $! "Installing dependencies"
+    print_status "Installing Node.js 20 & System Dependencies"
+    apt-get update > /dev/null 2>&1
+    apt-get install -y ca-certificates curl gnupg zip unzip git wget > /dev/null 2>&1
     
-    print_status "Setting up Node.js repository"
-    sudo mkdir -p /etc/apt/keyrings
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | \
-      sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg > /dev/null 2>&1
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | \
-      sudo tee /etc/apt/sources.list.d/nodesource.list > /dev/null 2>&1
-      
-    print_status "Updating package lists"
-    sudo apt-get update > /dev/null 2>&1 &
-    animate_progress $! "Updating package lists"
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg --yes > /dev/null 2>&1
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list > /dev/null 2>&1
     
-    print_status "Installing Node.js"
-    sudo apt-get install -y nodejs > /dev/null 2>&1 &
-    animate_progress $! "Installing Node.js"
-    check_success "Node.js installed" "Failed to install Node.js"
+    apt-get update > /dev/null 2>&1
+    apt-get install -y nodejs > /dev/null 2>&1
+    check_success "Node.js 20 installed" "Failed to install Node.js"
 
-    # --- Step 2: Install Yarn, Dependencies &  Release ---
-    print_header "INSTALLING DEPENDENCIES"
+    # --- Step 2: Install Yarn & Dependencies ---
     print_status "Installing Yarn"
-    npm i -g yarn > /dev/null 2>&1 &
-    animate_progress $! "Installing Yarn"
-    check_success "Yarn installed" "Failed to install Yarn"
-
-    print_status "Changing to panel directory"
+    npm i -g yarn > /dev/null 2>&1
+    
     cd /var/www/pterodactyl || { print_error "Panel directory not found!"; return 1; }
     
-    print_status "Installing Yarn dependencies"
-    yarn > /dev/null 2>&1 &
+    # CRITICAL FIX: Installing the missing pathe and axios versions that caused your build error
+    print_status "Fixing missing dependencies (pathe & axios)"
+    yarn add pathe axios@latest --dev > /dev/null 2>&1 &
+    animate_progress $! "Patching dependencies"
+
+    print_status "Running main Yarn install"
+    yarn install --production --ignore-scripts > /dev/null 2>&1 &
     animate_progress $! "Installing Yarn dependencies"
-    check_success "Yarn dependencies installed" "Failed to install Yarn dependencies"
+    check_success "Dependencies ready" "Yarn install failed"
 
-    print_status "Installing additional packages"
-    sudo apt install -y zip unzip git curl wget > /dev/null 2>&1 &
-    animate_progress $! "Installing additional packages"
-    check_success "Additional packages installed" "Failed to install additional packages"
-
-    # --- Step 3: Download and Extract Release ---
-    print_header "DOWNLOADING "
-    print_status "Downloading latest release"
-    wget https://github.com/BlueprintFramework/framework/releases/download/beta-2025-11/beta-2025-11.zip
-    unzip -o beta-2025-11.zip
-    animate_progress $! "Downloading release"
-    check_success "Release downloaded" "Failed to download release"
-
-    print_status "Extracting release files"
-    unzip -o beta-2025-11.zip > /dev/null 2>&1 &
-    animate_progress $! "Extracting files"
+    # --- Step 3: Download Release ---
+    print_header "DOWNLOADING BLUEPRINT"
+    print_status "Fetching beta-2025-11"
+    wget -q --show-progress https://github.com/BlueprintFramework/framework/releases/download/beta-2025-11/beta-2025-11.zip -O release.zip
+    
+    print_status "Extracting files"
+    unzip -o release.zip > /dev/null 2>&1
+    rm release.zip
     check_success "Files extracted" "Failed to extract files"
 
-    # --- Step 4: Run  Installer ---
-    print_header "RUNNING BLUEPRINT INSTALLER"
+    # --- Step 4: Run Installer ---
+    print_header "RUNNING BLUEPRINT"
     if [ ! -f "blueprint.sh" ]; then
-        print_error "blueprint.sh not found in release package"
+        print_error "blueprint.sh not found!"
         return 1
     fi
 
-    print_status "Making blueprint.sh executable"
     chmod +x blueprint.sh
-    check_success "Made executable" "Failed to make executable"
-
-    print_status "Running Blueprint installer"
+    print_status "Starting Blueprint script..."
     bash blueprint.sh
 }
 
-# Function: Reinstall (Rerun Only)
 reinstall_mahim() {
-    print_header "REINSTALLING "
-    print_status "Starting reinstallation"
-    blueprint -rerun-install > /dev/null 2>&1 &
-    animate_progress $! "Reinstalling"
-    check_success "Reinstallation completed" "Reinstallation failed"
+    print_header "REINSTALLING"
+    cd /var/www/pterodactyl && blueprint -rerun-install
 }
 
-# Function: Update 
 update_mahim() {
-    print_header "UPDATING "
-    print_status "Starting update"
-    blueprint -upgrade > /dev/null 2>&1 &
-    animate_progress $! "Updating"
-    check_success "Update completed" "Update failed"
+    print_header "UPDATING"
+    cd /var/www/pterodactyl && blueprint -upgrade
 }
 
-# Function to display the main menu
 show_menu() {
-    clear
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}           🔧 BLUEPRINT INSTALLER               ${NC}"
-    echo -e "${CYAN}                                 ${NC}"
+    echo -e "${CYAN}            🔧 BLUEPRINT INSTALLER               ${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e ""
-    echo -e "${WHITE}╔═══════════════════════════════════════════════╗${NC}"
-    echo -e "${WHITE}║                📋 MAIN MENU                   ║${NC}"
-    echo -e "${WHITE}╠═══════════════════════════════════════════════╣${NC}"
-    echo -e "${WHITE}║   ${GREEN}1)${NC} ${CYAN}Fresh Install${NC}                         ${WHITE}║${NC}"
-    echo -e "${WHITE}║   ${GREEN}2)${NC} ${CYAN}Reinstall (Rerun Only)${NC}                ${WHITE}║${NC}"
-    echo -e "${WHITE}║   ${GREEN}3)${NC} ${CYAN}Update ${NC}                 ${WHITE}║${NC}"
-    echo -e "${WHITE}║   ${GREEN}0)${NC} ${RED}Exit${NC}                               ${WHITE}║${NC}"
-    echo -e "${WHITE}╚═══════════════════════════════════════════════╝${NC}"
-    echo -e ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}📝 Select an option [0-3]: ${NC}"
+    echo -e "${GREEN}1)${NC} Fresh Install (Fixes Pathe/Axios Errors)"
+    echo -e "${GREEN}2)${NC} Reinstall (Rerun Only)"
+    echo -e "${GREEN}3)${NC} Update"
+    echo -e "${RED}0)${NC} Exit"
+    echo -ne "${YELLOW}Select an option: ${NC}"
 }
 
-# Main execution
+# Main execution loop
 welcome_animation
-
 while true; do
     show_menu
     read -r choice
-    
     case $choice in
         1) install_mahim ;;
         2) reinstall_mahim ;;
         3) update_mahim ;;
-        0) 
-            echo -e "${GREEN}Exiting Blueprint Installer...${NC}"
-            echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${CYAN}           Thank you for using our tools!       ${NC}"
-            echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            sleep 2
-            exit 0 
-            ;;
-        *) 
-            print_error "Invalid option! Please choose between 0-3"
-            sleep 2
-            ;;
+        0) exit 0 ;;
+        *) print_error "Invalid option!" ; sleep 1 ;;
     esac
-    
-    echo -e ""
-    read -p "$(echo -e "${YELLOW}Press Enter to continue...${NC}")" -n 1
 done
