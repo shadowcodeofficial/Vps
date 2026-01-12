@@ -1,10 +1,9 @@
 #!/bin/bash
-
 # =============================================================================
 # Blueprint Framework Installer for Pterodactyl Panel
-# Fully Remastered, Redesigned & Colorful – December 2025
+# Fully Remastered, Redesigned & Colorful – Updated January 2026
+# Fixes for 'path' / 'pathe' / 'join' module not found errors
 # =============================================================================
-
 set -euo pipefail
 
 # ----------------------------- Color Definitions -----------------------------
@@ -23,7 +22,7 @@ NC='\033[0m' # No Color
 banner() {
     echo -e "${PURPLE}${BOLD}"
     printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' '='
-    echo "                           $1"
+    echo " $1"
     printf '%*s\n' "${COLUMNS:-$(tput cols)}" '' | tr ' ' '='
     echo -e "${NC}"
 }
@@ -41,7 +40,7 @@ NODE_VERSION="20"
 
 # ----------------------------- Welcome Banner --------------------------------
 clear
-banner "Blueprint Framework Installer"
+banner "Blueprint Framework Installer - 2026 Fixed Edition"
 echo
 
 # ----------------------------- Root & Directory Check ------------------------
@@ -56,100 +55,119 @@ if [[ ! -d "$PTERODACTYL_DIRECTORY" ]]; then
     exit 1
 fi
 
-cd "$PTERODACTYL_DIRECTORY"
+cd "$PTERODACTYL_DIRECTORY" || exit 1
+
+# ----------------------------- Clean previous broken installation ------------
+step "Cleaning previous node_modules & lockfile (prevents most path errors)"
+rm -rf node_modules .yarn/cache yarn.lock 2>/dev/null || true
+yarn cache clean --all 2>/dev/null || true
+log "Cleaned old dependencies"
 
 # ----------------------------- Install System Dependencies -------------------
 step "Updating package index and installing system dependencies"
-apt update --quiet > /dev/null
-apt install -y ca-certificates curl wget unzip git gnupg zip > /dev/null 2>&1
-log "System dependencies installed successfully"
+apt update --quiet -y >/dev/null
+apt install -y ca-certificates curl wget unzip git gnupg zip >/dev/null 2>&1
+log "System dependencies installed"
 
 # ----------------------------- Install Node.js 20 -----------------------------
 step "Configuring NodeSource repository for Node.js $NODE_VERSION"
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg > /dev/null
+    | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg >/dev/null
 
 cat > /etc/apt/sources.list.d/nodesource.list <<EOF
 deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main
 EOF
 
-apt update --quiet > /dev/null
-apt install -y nodejs > /dev/null 2>&1
+apt update --quiet -y >/dev/null
+apt install -y nodejs >/dev/null 2>&1
 
 node_ver=$(node -v)
 npm_ver=$(npm -v)
 log "Node.js $node_ver and npm $npm_ver installed"
 
-# Install Yarn globally if not present
-if ! command -v yarn &> /dev/null; then
+# Install Yarn globally if missing
+if ! command -v yarn >/dev/null 2>&1; then
     step "Installing Yarn package manager globally"
-    npm i -g yarn > /dev/null 2>&1
-    log "Yarn installed successfully"
+    npm install -g yarn >/dev/null 2>&1
+    log "Yarn installed"
 else
-    info "Yarn is already installed"
+    info "Yarn already installed"
 fi
 
+# ----------------------------- Critical Fix: Install missing packages --------
+step "Installing missing packages that fix 'path' / 'join' errors"
+yarn add path --force
+yarn add -D @types/node @types/react @types/react-dom --force
+log "Added path + TypeScript types"
+
 # ----------------------------- Download Latest Release -----------------------
-step "Retrieving latest Blueprint Framework release"
+step "Fetching latest Blueprint Framework release"
 DOWNLOAD_URL=$(curl -s "https://api.github.com/repos/${BLUEPRINT_REPO}/releases/latest" \
     | grep "browser_download_url.*\.zip" \
     | cut -d '"' -f 4 \
     | head -n 1)
 
 if [[ -z "$DOWNLOAD_URL" ]]; then
-    error "Failed to retrieve download URL for latest release"
-    error "Check your internet connection or the repository status"
+    error "Could not find latest release download URL"
+    error "Check internet connection or visit: https://github.com/${BLUEPRINT_REPO}/releases"
     exit 1
 fi
 
 info "Download URL: $DOWNLOAD_URL"
 wget --quiet --show-progress -O release.zip "$DOWNLOAD_URL"
-log "Latest release downloaded"
 
-step "Extracting Blueprint Framework files"
-unzip -o release.zip > /dev/null
-rm release.zip
-log "Files extracted and temporary archive removed"
+step "Extracting files..."
+unzip -o release.zip >/dev/null 2>&1
+rm -f release.zip
+log "Release extracted"
 
-# ----------------------------- Install Node Dependencies ---------------------
-step "Installing project dependencies with Yarn"
-yarn install --frozen-lockfile > /dev/null 2>&1
-log "All dependencies installed"
+# ----------------------------- Install ALL dependencies ----------------------
+step "Installing complete project dependencies (this may take 2-5 minutes)"
+yarn install --force --check-files --network-timeout 100000 >/dev/null 2>&1
+log "Dependencies installed successfully"
 
-# ----------------------------- Create Configuration ---------------------------
-step "Generating .blueprintrc configuration file"
+# ----------------------------- Create .blueprintrc ---------------------------
+step "Creating .blueprintrc configuration"
 cat > .blueprintrc << 'EOF'
-WEBUSER="www-data";
-OWNERSHIP="www-data:www-data";
-USERSHELL="/bin/bash";
+WEBUSER="www-data"
+OWNERSHIP="www-data:www-data"
+USERSHELL="/bin/bash"
 EOF
-log ".blueprintrc created with standard web server settings"
+log ".blueprintrc created"
 
-# Ensure blueprint.sh is executable
+# Make blueprint.sh executable
 if [[ -f "blueprint.sh" ]]; then
     chmod +x blueprint.sh
-    log "blueprint.sh set as executable"
+    log "blueprint.sh is now executable"
 else
-    error "blueprint.sh not found after extraction"
+    error "blueprint.sh not found after extraction!"
     exit 1
 fi
 
 # ----------------------------- Run Blueprint Installer -----------------------
-banner "Executing Blueprint Framework Installer"
+banner "Starting Blueprint Framework Setup"
 echo
 bash ./blueprint.sh
 
-# ----------------------------- Completion Message ----------------------------
+# ----------------------------- Final Steps & Messages ------------------------
 clear
-banner "Installation Completed Successfully"
+banner "Installation Finished Successfully!"
 echo
-log "Blueprint Framework has been fully installed and configured"
-warn "Recommended post-installation steps:"
-echo "   • Clear PHP cache: php artisan view:clear && php artisan config:cache"
-echo "   • Clear browser cache or use incognito mode"
-echo "   • Check the panel for any Blueprint setup prompts"
+
+log "Blueprint Framework should now be installed"
+warn "Recommended final steps:"
+echo "  1. Clear caches:"
+echo "     php artisan view:clear"
+echo "     php artisan config:cache"
+echo "     php artisan optimize"
+echo "  2. Rebuild assets (very important after path fix):"
+echo "     yarn build"
+echo "  3. Refresh your browser (or use incognito mode)"
 echo
-info "You can now enjoy the enhanced Pterodactyl experience with Blueprint!"
+
+info "If you still see errors → run 'yarn build' manually and share the output"
+info "Enjoy your enhanced Pterodactyl Panel! 🚀"
+echo
 
 exit 0
